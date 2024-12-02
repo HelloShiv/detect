@@ -1,7 +1,14 @@
 import * as mobilenet from '@tensorflow-models/mobilenet';
-import * as tf from '@tensorflow/tfjs-node';
+import * as tf from '@tensorflow/tfjs-node';  // TensorFlow.js Node.js package
 import fs from 'fs';
 import path from 'path';
+
+// Force the backend to be 'tensorflow' (Node.js backend)
+tf.setBackend('tensorflow').then(() => {
+  console.log('TensorFlow.js backend set to "tensorflow".');
+}).catch((error) => {
+  console.error('Failed to set TensorFlow.js backend:', error);
+});
 
 // Cache the MobileNet model to load it only once per deployment
 let model;

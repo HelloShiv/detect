@@ -1,20 +1,11 @@
 import * as mobilenet from '@tensorflow-models/mobilenet';
-import * as tf from '@tensorflow/tfjs-node';  // TensorFlow.js Node.js package
-import fs from 'fs';
-import path from 'path';
+import * as tf from '@tensorflow/tfjs-node'; // Use tfjs-node for server-side
+import sharp from 'sharp'; // Image processing library
 
-// Force the backend to be 'tensorflow' (Node.js backend)
-tf.setBackend('tensorflow').then(() => {
-  console.log('TensorFlow.js backend set to "tensorflow".');
-}).catch((error) => {
-  console.error('Failed to set TensorFlow.js backend:', error);
-});
-
-// Cache the MobileNet model to load it only once per deployment
 let model;
 const loadModel = async () => {
   if (!model) {
-    // Load the smallest MobileNet model (version 1, alpha 0.25)
+    // Load the MobileNet model (version 1, alpha 0.25)
     model = await mobilenet.load({
       version: 1,
       alpha: 0.25, // Smallest model variant
@@ -23,24 +14,21 @@ const loadModel = async () => {
   return model;
 };
 
-export async function POST(req) {
+export async function POST(request) {
   try {
-    // Parse the request to get the image file path
-    const { imagePath } = await req.json();
+    // Parse the incoming request data
+    const { imageData } = await request.json();
 
-    // Ensure the path is valid and resolve it relative to the server
-    const resolvedPath = path.resolve(process.cwd(), imagePath);
+    // Decode the base64 image
+    const buffer = Buffer.from(imageData, 'base64');
 
-    if (!fs.existsSync(resolvedPath)) {
-      return new Response(JSON.stringify({ error: 'File not found' }), { status: 404 });
-    }
+    // Use Sharp to decode and resize the image
+    const image = await sharp(buffer)
+      .resize(224, 224)
+      .toBuffer();
 
-    // Read the image file into a buffer
-    const imageBuffer = fs.readFileSync(resolvedPath);
-
-    // Decode and resize the image buffer into a Tensor to optimize processing time
-    let imageTensor = tf.node.decodeImage(imageBuffer);
-    imageTensor = tf.image.resizeBilinear(imageTensor, [224, 224]);  // Resize to MobileNet input size (224x224)
+    // Convert the image buffer into a tensor
+    const imageTensor = tf.node.decodeImage(image);
 
     // Load the model (use cached model if already loaded)
     const model = await loadModel();
@@ -48,10 +36,10 @@ export async function POST(req) {
     // Classify the image
     const predictions = await model.classify(imageTensor);
 
-    // Dispose of the tensor to free memory
+    // Dispose of tensors to free memory
     imageTensor.dispose();
 
-    // Return the predictions as JSON
+    // Return predictions as JSON response
     return new Response(JSON.stringify({ predictions }), { status: 200 });
   } catch (error) {
     console.error('Error:', error);
